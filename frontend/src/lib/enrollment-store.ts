@@ -2,7 +2,6 @@ import { create } from "zustand";
 
 import { api } from "@/lib/api";
 import type { Course, Enrollment, Student, User } from "@/lib/types";
-import { de } from "zod/v4/locales";
 
 type ApiStudent = Omit<Student, "emails"> & { emails?: string[] };
 type ApiEnrollment = Enrollment & { createdAt?: string };
