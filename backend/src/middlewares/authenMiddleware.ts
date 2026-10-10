@@ -33,7 +33,7 @@ export const authenticateToken = (
     // Verify token
     const jwt_secret = process.env.JWT_SECRET || "this_is_my_secret";
     jwt.verify(token, jwt_secret, async (err, user) => {
-      
+
       if (err) {
         return res.status(403).json({
           success: false,

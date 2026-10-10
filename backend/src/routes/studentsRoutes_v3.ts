@@ -1,5 +1,5 @@
-import { Router, type Request, type Response } from "express";
-import { zStudentPostBody, zStudentId } from "../libs/zodValidators.js";
+import { Router, type NextFunction, type Request, type Response } from "express";
+import { zStudentPostBody, zStudentId, zStudentPutBody } from "../libs/zodValidators.js";
 
 import type { Student, CustomRequest } from "../libs/types.js";
 
@@ -122,6 +122,119 @@ router.get(
 
 // POST /api/v3/students, body = {new student data}
 // add a new student
+router.put("/",
+  authenticateToken,
+  checkRoles,
+  async (req: CustomRequest, res: Response, next: NextFunction) => {
+    try {
+      const user = req.user?.studentId;
+      if (req.user?.role === "ADMIN") {
+        return next('route');
+      }
+      const body = (await req.body)
+      const result = zStudentPutBody.safeParse(body);
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: "Validation failed",
+          errors: result.error.issues[0]?.message,
+        })
+      }
+
+      if (user != result.data.studentId) {
+        return res.json(403).json({
+          success: false,
+        })
+      }
+
+      const student = await prisma.student.findUnique({
+        where: { studentId: result.data.studentId },
+      });
+      if (student == null) {
+        return res.json(404).json({
+          success: false,
+        })
+      }
+
+      const { firstName, lastName, program, interests, emails } = result.data;
+      const newData = await prisma.student.update({
+        where: { studentId: result.data.studentId },
+        data: {
+          ...(firstName != null && { firstName }),
+          ...(lastName != null && { lastName }),
+          ...(program != null && { program }),
+          ...(interests != null && { interests }),
+          ...(emails != null && { emails }),
+        },
+      })
+
+      return res.status(200).json({
+        success: true,
+        message: `updated ${result.data.studentId}`,
+        data: newData,
+      });
+
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Somthing is wrong, please try again",
+        error: err,
+      });
+    }
+  })
+
+router.put("/",
+  authenticateToken,
+  checkRoleAdmin,
+  async (req: CustomRequest, res: Response) => {
+    try {
+      const body = (await req.body)
+      const result = zStudentPutBody.safeParse(body);
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: "Validation failed",
+          errors: result.error.issues[0]?.message,
+        })
+      }
+
+      const student = await prisma.student.findUnique({
+        where: { studentId: result.data.studentId },
+      });
+      if (student == null) {
+        return res.json(404).json({
+          success: false,
+        })
+      }
+      const { firstName, lastName, program, interests, emails } = result.data;
+      const newData = await prisma.student.update({
+        where: { studentId: result.data.studentId },
+        data: {
+          ...(firstName != null && { firstName }),
+          ...(lastName != null && { lastName }),
+          ...(program != null && { program }),
+          ...(interests != null && { interests }),
+          ...(emails != null && { emails }),
+        },
+      })
+
+      return res.status(200).json({
+        success: true,
+        message: `updated ${result.data.studentId}`,
+        data: newData,
+      });
+
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Somthing is wrong, please try again",
+        error: err,
+      });
+    }
+  })
+
+
+
 router.post(
   "/",
   authenticateToken,
@@ -130,7 +243,6 @@ router.post(
     try {
       // get new student info from req.body
       const body = (await req.body) as Student;
-
       // validate req.body with predefined validator
       const result = zStudentPostBody.safeParse(body); // check zod
       if (!result.success) {
@@ -182,5 +294,53 @@ router.post(
     }
   },
 );
+
+router.delete(
+  "/",
+  authenticateToken,
+  checkRoleAdmin,
+  async (req: CustomRequest, res: Response) => {
+    try {
+      const body = (await req.body).studentId
+      const result = zStudentId.safeParse(body);
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: "Validation failed",
+          errors: result.error.issues[0]?.message,
+        });
+      }
+
+      const student = await prisma.student.findUnique({
+        where: { studentId: result.data },
+      });
+      if (student == null) {
+        return res.status(404).json({});
+      }
+
+      const [_, delStudent] = await prisma.$transaction([
+        prisma.enrollment.deleteMany({
+          where: { studentId: result.data },
+        }),
+        prisma.student.delete({
+          where: { studentId: result.data },
+        })
+      ]);
+
+      return res.status(200).json({
+        success: true,
+        message: `Deleted ${delStudent.studentId}`,
+        data: delStudent,
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Somthing is wrong, please try again",
+        error: err,
+      });
+    }
+  },
+);
+
 
 export default router;

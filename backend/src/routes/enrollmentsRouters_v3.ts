@@ -1,12 +1,12 @@
-import { Router, type Request, type Response } from "express";
-import { zEnrollmentBody } from "../libs/zodValidators.ts";
+import { Router, type NextFunction, type Request, type Response } from "express";
+import { zEnrollmentBody, zEnrollmentPutBody } from "../libs/zodValidators.ts";
 
-import type { CustomRequest } from "../libs/types.ts";
+import type { Course, CustomRequest } from "../libs/types.ts";
 
 // import authentication middleware
 import { authenticateToken } from "../middlewares/authenMiddleware.ts";
 import { checkRoles } from "../middlewares/checkRolesDBMiddleware.ts";
-
+import { checkRoleAdmin } from "../middlewares/checkRoleAdminDBMiddleware.ts";
 // import database
 import { PrismaClient } from "../../generated/prisma/client.ts";
 const prisma = new PrismaClient();
@@ -116,6 +116,315 @@ router.post(
     }
   },
 );
+
+router.put(
+  "/",
+  authenticateToken,
+  checkRoles,
+  async (req: CustomRequest, res: Response, next: NextFunction) => {
+    try {
+      const user = req.user;
+      if (user?.role == 'ADMIN') {
+        return next('route');
+      }
+      const result = zEnrollmentPutBody.safeParse(await req.body);
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: "Validation failed",
+          errors: result.error.issues[0]?.message,
+        });
+      }
+
+
+      if (result.data.courseId === result.data.newCourseId) {
+        return res.status(400);
+      }
+      if (result.data.studentId !== user?.studentId) {
+        return res.status(403);
+      }
+      const have = await prisma.enrollment.findMany({
+        where: {
+          studentId: result.data.studentId,
+          courseId: result.data.courseId
+        }
+      })
+      if (have.length == 0) {
+        return res.status(404);
+      }
+      const newHaveInCourse = await prisma.course.findMany({
+        where: {
+          courseId: result.data.newCourseId
+        }
+      })
+      if (newHaveInCourse.length == 0) {
+        return res.status(404);
+      }
+      const newEnrolled = await prisma.enrollment.findMany({
+        where: {
+          studentId: result.data.studentId,
+          courseId: result.data.newCourseId
+        }
+      })
+      if (newEnrolled.length != 0) {
+        return res.status(409);
+      }
+
+      const enrollments = await prisma.enrollment.updateMany({
+        where: {
+          studentId: result.data.studentId,
+          courseId: result.data.courseId
+        },
+        data: {
+          courseId: result.data.newCourseId
+        }
+      });
+
+      const whatChange = await prisma.enrollment.findMany({
+        where: {
+          studentId: result.data.studentId,
+          courseId: result.data.newCourseId
+        }
+      })
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          courseId: whatChange[0].courseId,
+          StudentId: whatChange[0].studentId
+        },
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Something is wrong, please try again",
+        error: err,
+      });
+    }
+  },
+);
+
+router.put(
+  "/",
+  authenticateToken,
+  checkRoleAdmin,
+  async (req: CustomRequest, res: Response) => {
+    try {
+      const user = req.user;
+      const result = zEnrollmentPutBody.safeParse(await req.body);
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: "Validation failed",
+          errors: result.error.issues[0]?.message,
+        });
+      }
+
+      if (result.data.courseId === result.data.newCourseId) {
+        return res.status(400);
+      }
+      const have = await prisma.enrollment.findMany({
+        where: {
+          studentId: result.data.studentId,
+          courseId: result.data.courseId
+        }
+      })
+      if (have.length == 0) {
+        return res.status(404);
+      }
+      const newHaveInCourse = await prisma.course.findMany({
+        where: {
+          courseId: result.data.newCourseId
+        }
+      })
+      if (newHaveInCourse.length == 0) {
+        return res.status(404);
+      }
+      const newEnrolled = await prisma.enrollment.findMany({
+        where: {
+          studentId: result.data.studentId,
+          courseId: result.data.newCourseId
+        }
+      })
+      if (newEnrolled.length != 0) {
+        return res.status(409);
+      }
+
+      const enrollments = await prisma.enrollment.updateMany({
+        where: {
+          studentId: result.data.studentId,
+          courseId: result.data.courseId
+        },
+        data: {
+          courseId: result.data.newCourseId
+        }
+      });
+
+      const whatChange = await prisma.enrollment.findMany({
+        where: {
+          studentId: result.data.studentId,
+          courseId: result.data.newCourseId
+        }
+      })
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          courseId: whatChange[0].courseId,
+          StudentId: whatChange[0].studentId
+        },
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Something is wrong, please try again",
+        error: err,
+      });
+    }
+  },
+);
+
+//router.delete( // admin
+//  "/",
+//  authenticateToken,
+//  checkRoleAdmin,
+//  async (req: CustomRequest, res: Response) => {
+//    try {
+//      const user = req.user;
+//      const result = zEnrollmentPutBody.safeParse(await req.body);
+//      if (!result.success) {
+//        return res.status(400).json({
+//          success: false,
+//          message: "Validation failed",
+//          errors: result.error.issues[0]?.message,
+//        });
+//      }
+//      const allEnrolled = await prisma.enrollment.findMany({
+//      })
+//
+//      const enrollments = await prisma.enrollment.findMany({
+//        where:
+//          user?.role === "STUDENT" ? { studentId: user.studentId ?? "" } : {},
+//        orderBy: { createdAt: "asc" },
+//      });
+//
+//      return res.json({
+//        success: true,
+//        data: enrollments,
+//      });
+//    } catch (err) {
+//      return res.status(500).json({
+//        success: false,
+//        message: "Something is wrong, please try again",
+//        error: err,
+//      });
+//    }
+//  },
+//);
+
+router.delete( // non-admin
+  "/",
+  authenticateToken,
+  checkRoles,
+  async (req: CustomRequest, res: Response, next: NextFunction) => {
+    try {
+      const user = req.user;
+      if (user?.role == 'ADMIN') {
+        return next('route');
+      }
+      const result = zEnrollmentBody.safeParse(await req.body);
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: "Validation failed",
+          errors: result.error.issues[0]?.message,
+        });
+      }
+      if (req.user?.studentId != result.data.studentId) {
+        return res.status(403);
+      }
+      const have = await prisma.enrollment.findMany({
+        where: {
+          ...(result.data.courseId ? { courseId: result.data.courseId } : {}),
+          ...(user?.role === "STUDENT" ? { studentId: user.studentId ?? "" } : {}),
+        },
+      });
+      if (have.length == 0) {
+        return res.status(404);
+      }
+
+      const deleted = await prisma.enrollment.deleteMany({
+        where: {
+          studentId: result.data.studentId,
+          courseId: result.data.courseId
+        }
+      })
+
+      return res.status(200).json({
+        success: true,
+        data: deleted,
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Something is wrong, please try again",
+        error: err,
+      });
+    }
+  },
+);
+
+router.delete(
+  "/",
+  authenticateToken,
+  checkRoleAdmin,
+  async (req: CustomRequest, res: Response) => {
+    try {
+      const user = req.user;
+      const result = zEnrollmentBody.safeParse(await req.body);
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: "Validation failed",
+          errors: result.error.issues[0]?.message,
+        });
+      }
+
+      const have = await prisma.enrollment.findMany({
+        where: {
+          ...(result.data.courseId ? { courseId: result.data.courseId } : {}),
+          ...(user?.role === "STUDENT" ? { studentId: user.studentId ?? "" } : {}),
+        },
+      });
+      if (have.length == 0) {
+        return res.status(404);
+      }
+
+      const deleted = await prisma.enrollment.deleteMany({
+        where: {
+          studentId: result.data.studentId,
+          courseId: result.data.courseId
+        }
+      })
+
+      return res.status(200).json({
+        success: true,
+        data: deleted,
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Something is wrong, please try again",
+        error: err,
+      });
+    }
+  },
+);
+
+
+
+
+
 
 // TODO การบ้าน 2.1: PUT /api/v3/enrollments, body = {studentId, courseId, newCourseId}
 //   เปลี่ยนวิชาที่ลงทะเบียนไว้ (courseId → newCourseId)
